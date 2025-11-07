@@ -1,0 +1,225 @@
+// This is your Prisma schema file - MySQL version for Timeweb
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PATIENT
+  CLINIC_ADMIN
+  DOCTOR
+  SUPER_ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  phone     String?
+  role      UserRole @default(PATIENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient      Patient?
+  doctor       Doctor?
+  clinicAdmins ClinicAdmin[]
+
+  @@map("users")
+}
+
+model Patient {
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  firstName String
+  lastName  String
+  birthDate DateTime?
+  notes     String?   @db.Text
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  reviews      Review[]
+
+  @@map("patients")
+}
+
+model Clinic {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  address     String
+  latitude    Float
+  longitude   Float
+  phone       String
+  email       String?
+  logoUrl     String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  doctors      Doctor[]
+  appointments Appointment[]
+  reviews      Review[]
+  admins       ClinicAdmin[]
+
+  @@map("clinics")
+}
+
+model ClinicAdmin {
+  id       String @id @default(uuid())
+  userId   String
+  clinicId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clinicId])
+  @@map("clinic_admins")
+}
+
+model Specialization {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String? @db.Text
+  icon        String?
+
+  doctors DoctorSpecialization[]
+
+  @@map("specializations")
+}
+
+model Doctor {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  clinicId  String
+  firstName String
+  lastName  String
+  photoUrl  String?
+  bio       String?  @db.Text
+  rating    Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic          Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  specializations DoctorSpecialization[]
+  schedules       Schedule[]
+  availabilities Availability[]
+  appointments    Appointment[]
+  reviews         Review[]
+
+  @@map("doctors")
+}
+
+model DoctorSpecialization {
+  id               String @id @default(uuid())
+  doctorId         String
+  specializationId String
+
+  doctor         Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialization Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, specializationId])
+  @@map("doctor_specializations")
+}
+
+model Schedule {
+  id         String   @id @default(uuid())
+  doctorId   String
+  dayOfWeek  Int // 0 = Воскресенье, 1 = Понедельник, ..., 6 = Суббота
+  startTime  String // "08:00"
+  endTime    String // "18:00"
+  breakStart String? // "12:00"
+  breakEnd   String? // "13:00"
+  createdAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+model Availability {
+  id        String   @id @default(uuid())
+  doctorId  String
+  date      DateTime // Конкретная дата
+  startTime String   // "08:00"
+  endTime   String   // "18:00"
+  breakStart String? // "12:00"
+  breakEnd   String? // "13:00"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date])
+  @@map("availabilities")
+}
+
+model Appointment {
+  id        String            @id @default(uuid())
+  patientId String
+  doctorId  String
+  clinicId  String
+  dateTime  DateTime
+  duration  Int               @default(30) // Длительность в минутах
+  status    AppointmentStatus @default(PENDING)
+  notes     String?           @db.Text
+  adminNotes String?          @db.Text // Заметки для администратора клиники
+  smsSent   Boolean           @default(false)
+  smsCode   String?           // Код подтверждения SMS
+  confirmed Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  patientId String
+  doctorId  String
+  clinicId  String
+  rating    Int // 1-5
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+model SiteContent {
+  id          String   @id @default(uuid())
+  key         String   // Например: "home.title", "home.subtitle"
+  language    String   @default("ro") // "ro" или "ru"
+  value       String   @db.Text // Текст контента
+  description String?  @db.Text // Описание для администратора
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([key, language])
+  @@map("site_content")
+}
+
+
