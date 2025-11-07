@@ -22,6 +22,9 @@ dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy for Railway (important for rate limiting and IP detection)
+app.set('trust proxy', true);
+
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL ? [process.env.FRONTEND_URL, 'https://cq719442.tw1.ru'] : '*',
